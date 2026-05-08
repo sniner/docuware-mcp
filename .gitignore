@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.credentials*
+.mcp-inspector.json
+.session
+/build/
+/dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.egg
+/CLAUDE.md
+/*.py
+/design/
