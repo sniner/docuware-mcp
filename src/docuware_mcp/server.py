@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import time
@@ -313,13 +314,53 @@ def status() -> Dict[str, Any]:
         return {"connected": False, "error": str(exc)}
 
 
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="docuware-mcp",
+        description="MCP server exposing a DocuWare DMS to LLM-based agents.",
+    )
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Serve over Streamable HTTP instead of stdio (for clients like Open WebUI).",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("DW_MCP_HOST", "127.0.0.1"),
+        help="HTTP bind address (default: 127.0.0.1, env: DW_MCP_HOST).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("DW_MCP_PORT", "8765")),
+        help="HTTP port (default: 8765, env: DW_MCP_PORT).",
+    )
+    parser.add_argument(
+        "--path",
+        default=os.environ.get("DW_MCP_PATH", "/mcp/"),
+        help="HTTP mount path (default: /mcp/, env: DW_MCP_PATH).",
+    )
+    return parser
+
+
 def main() -> None:
-    """Entry point — run the MCP server over stdio."""
+    """Entry point — run the MCP server.
+
+    Default transport is stdio (for Claude Desktop / Claude Code). Pass ``--http``
+    to serve Streamable HTTP for browser-based clients like Open WebUI.
+    """
+    args = _build_arg_parser().parse_args()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    mcp.run()
+    if args.http:
+        log.info(
+            "Serving Streamable HTTP on http://%s:%d%s", args.host, args.port, args.path
+        )
+        mcp.run(transport="http", host=args.host, port=args.port, path=args.path)
+    else:
+        mcp.run()
 
 
 if __name__ == "__main__":
