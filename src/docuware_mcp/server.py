@@ -354,13 +354,17 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    if args.http:
-        log.info(
-            "Serving Streamable HTTP on http://%s:%d%s", args.host, args.port, args.path
-        )
-        mcp.run(transport="http", host=args.host, port=args.port, path=args.path)
-    else:
-        mcp.run()
+    try:
+        if args.http:
+            log.info(
+                "Serving Streamable HTTP on http://%s:%d%s",
+                args.host, args.port, args.path,
+            )
+            mcp.run(transport="http", host=args.host, port=args.port, path=args.path)
+        else:
+            mcp.run()
+    except KeyboardInterrupt:
+        log.info("Interrupted — shutting down")
 
 
 if __name__ == "__main__":
