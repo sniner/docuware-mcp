@@ -345,19 +345,19 @@ wheels = [
 
 [[package]]
 name = "docuware-client"
-version = "0.7.10"
+version = "0.7.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx", extra = ["http2"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/96/d88ea585afbebf42e8ef0ebdf8c23942fcc864b4a6121300167e30aca80a/docuware_client-0.7.10.tar.gz", hash = "sha256:1ab509d052a0abe7c0db174b1ced803dbd77fa4a758873114c99896103861ce7", size = 36002, upload-time = "2026-04-07T18:18:32.306Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/38/5110ba7b6e1379affe25992f3ae643e6dca70ae89b5246d474647967ab4d/docuware_client-0.7.11.tar.gz", hash = "sha256:53183883a08fd3e8ab329171342a3dcfeb1e4f16a9fc5cd825cdb4b458cad999", size = 37666, upload-time = "2026-05-11T18:22:20.895Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/a3/153af791fc8409407d1fba1a7140ab9686d97e7baabc5a749eb862dbc8a6/docuware_client-0.7.10-py3-none-any.whl", hash = "sha256:c1373f505edfbf4a42cbfa20e828cf8fc35c21b8beb1446ec02a49a5ef1a5f06", size = 45904, upload-time = "2026-04-07T18:18:31.014Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/c1/36aeb57d1574a25fd4a28cd6269cf09b9173cc44520365bf62913e7f0a3f/docuware_client-0.7.11-py3-none-any.whl", hash = "sha256:a4e4dcda88511d720ca20b726c693b76c2321ab6577c3df796da0efb8bdabec1", size = 47862, upload-time = "2026-05-11T18:22:19.561Z" },
 ]
 
 [[package]]
 name = "docuware-mcp"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "docuware-client" },
@@ -373,7 +373,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "docuware-client", specifier = ">=0.7.10" },
+    { name = "docuware-client", specifier = ">=0.7.11" },
     { name = "fastmcp", specifier = ">=2.0.0" },
 ]
 

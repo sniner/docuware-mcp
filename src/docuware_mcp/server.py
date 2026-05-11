@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import docuware
 from fastmcp import FastMCP
 
+from docuware_mcp import __version__
 from docuware_mcp.filters import (
     FilterValidationError,
     build_conditions,
@@ -140,7 +141,7 @@ def _extract_doc_id(field_values: Iterable[Any]) -> Optional[str]:
 
 # --- MCP server ---
 
-mcp = FastMCP("docuware-mcp")
+mcp = FastMCP("docuware-mcp", version=__version__)
 
 
 @mcp.tool()
@@ -261,12 +262,23 @@ def search(
     }
 
 
+def _attachment_summary(att: Any) -> Dict[str, Any]:
+    return {
+        "attachment_id": str(getattr(att, "id", "")),
+        "filename": getattr(att, "filename", None),
+        "content_type": getattr(att, "content_type", None),
+        "pages": getattr(att, "pages", None),
+        "size": getattr(att, "size", None),
+    }
+
+
 @mcp.tool()
 def get_document(archive: str, document_id: str) -> Dict[str, Any]:
     """Fetch a single document's metadata by primary-key ID.
 
-    Returns index field values, title, and content type. Does not return file
-    content — binary download will be a separate tool.
+    Returns index field values, title, content type, and a list of
+    attachments (DocuWare "sections"). Does not return file content — use
+    :func:`get_document_text` for OCR fulltext.
 
     Args:
         archive: Display name or internal ID of the archive.
@@ -282,6 +294,69 @@ def get_document(archive: str, document_id: str) -> Dict[str, Any]:
         "title": getattr(doc, "title", None),
         "content_type": getattr(doc, "content_type", None),
         "fields": _fields_to_dict(getattr(doc, "fields", None), allowed_ids=allowed_ids),
+        "attachments": [_attachment_summary(a) for a in getattr(doc, "attachments", []) or []],
+    }
+
+
+@mcp.tool()
+def get_document_text(
+    archive: str,
+    document_id: str,
+    attachment_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fetch the OCR fulltext of a document.
+
+    Returns one ``text`` block per attachment. By default all attachments
+    of the document are returned; pass ``attachment_id`` to fetch only one.
+    Attachments without OCR (cabinet not fulltext-indexed, document not yet
+    processed) appear with ``text: null`` and a populated ``error`` field
+    — one missing attachment does not fail the whole call.
+
+    Args:
+        archive: Display name or internal ID of the archive.
+        document_id: DocuWare document ID (DWDOCID).
+        attachment_id: If given, return text only for this attachment.
+            See :func:`get_document` for the attachment list.
+
+    Returns:
+        Dict with ``document_id`` and ``attachments`` (list of
+        ``{attachment_id, filename, content_type, pages, char_count, text}``;
+        ``error`` is set instead of ``text`` when OCR is unavailable).
+    """
+    client = _get_client()
+    fc = _resolve_archive(client, archive)
+    doc = fc.get_document(document_id)
+
+    attachments = list(getattr(doc, "attachments", []) or [])
+    if attachment_id is not None:
+        attachments = [a for a in attachments if str(getattr(a, "id", "")) == attachment_id]
+        if not attachments:
+            raise ValueError(
+                f"Document {document_id!r} has no attachment with id {attachment_id!r}"
+            )
+
+    results: List[Dict[str, Any]] = []
+    for att in attachments:
+        entry = _attachment_summary(att)
+        try:
+            text = att.text()
+        except docuware.DataError as exc:
+            entry["text"] = None
+            entry["char_count"] = 0
+            entry["error"] = str(exc)
+        else:
+            entry["text"] = text
+            entry["char_count"] = len(text)
+        results.append(entry)
+
+    log.info(
+        "get_document_text archive=%r [id=%s] doc=%s attachments=%d",
+        fc.name, fc.id, document_id, len(results),
+    )
+
+    return {
+        "document_id": str(document_id),
+        "attachments": results,
     }
 
 

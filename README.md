@@ -78,9 +78,30 @@ The config file lives at:
 - **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
 - **Claude Code**: `.mcp.json` in your project root (or run `claude mcp add docuware -- uvx docuware-mcp`)
 
+For [OpenCode](https://opencode.ai/) the shape is slightly different —
+add to `opencode.json` (project) or `~/.config/opencode/opencode.json`
+(user):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "docuware": {
+      "type": "local",
+      "command": ["uvx", "docuware-mcp"],
+      "environment": {
+        "DW_CREDENTIALS_FILE": "/path/to/credentials.json"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
 Restart the client after editing. The `docuware` server should then
 appear in the available-tools list, exposing `list_archives`,
-`describe_archive`, `search`, `get_document`, and `status`.
+`describe_archive`, `search`, `get_document`, `get_document_text`,
+and `status`.
 
 ### Running directly (for debugging)
 
