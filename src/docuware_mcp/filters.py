@@ -20,7 +20,7 @@ Limitations (per design — see docuware-mcp-design-decisions.md):
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, FrozenSet, List, Set, Tuple
 
 import docuware
 
@@ -259,6 +259,67 @@ def build_conditions(filters: Dict[str, Any], schema: ArchiveSchema) -> Dict[str
                 f"a condition (multiple conditions on the same field are not supported)"
             )
         out[fld.internal_id] = _translate_one(fld, spec)
+    return out
+
+
+_ORDER_DIRECTIONS: FrozenSet = frozenset({"asc", "desc", "default"})
+
+
+def parse_order_by(
+    order_by: Any, schema: ArchiveSchema
+) -> List[Tuple[str, str]]:
+    """Validate the ``order_by`` spec and resolve fields to internal IDs.
+
+    Accepts a list of ``{"field": str, "direction": "asc"|"desc"|"default"}``
+    dicts (``direction`` optional, defaults to ``"asc"``) and returns a list
+    of ``(internal_id, direction)`` tuples ready for ``SearchDialog.search()``.
+    """
+    if order_by is None:
+        return []
+    if not isinstance(order_by, list):
+        raise FilterValidationError(
+            f"order_by must be a list of {{field, direction}} dicts, got "
+            f"{type(order_by).__name__}"
+        )
+
+    out: List[Tuple[str, str]] = []
+    seen: Set[str] = set()
+    for i, entry in enumerate(order_by):
+        if not isinstance(entry, dict):
+            raise FilterValidationError(
+                f"order_by[{i}] must be a dict with keys 'field' and 'direction', "
+                f"got {type(entry).__name__}"
+            )
+        fname = entry.get("field")
+        if not isinstance(fname, str) or not fname:
+            raise FilterValidationError(
+                f"order_by[{i}].field must be a non-empty string"
+            )
+        direction = entry.get("direction") or "asc"
+        if not isinstance(direction, str):
+            raise FilterValidationError(
+                f"order_by[{i}].direction must be a string"
+            )
+        norm = direction.strip().lower()
+        if norm not in _ORDER_DIRECTIONS:
+            raise FilterValidationError(
+                f"order_by[{i}].direction must be one of "
+                f"{', '.join(sorted(_ORDER_DIRECTIONS))}, got {direction!r}"
+            )
+        try:
+            fld = schema.field_by_name(fname)
+        except KeyError:
+            raise FilterValidationError(
+                f"order_by[{i}]: unknown field {fname!r}. Available: "
+                f"{', '.join(schema.field_names())}"
+            ) from None
+        if fld.internal_id in seen:
+            raise FilterValidationError(
+                f"order_by[{i}]: field {fname!r} (id={fld.internal_id!r}) already "
+                f"appears earlier in order_by"
+            )
+        seen.add(fld.internal_id)
+        out.append((fld.internal_id, norm))
     return out
 
 

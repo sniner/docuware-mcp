@@ -1,6 +1,6 @@
 [project]
 name = "docuware-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server exposing a DocuWare DMS to LLM-based agents"
 authors = [{ name = "Stefan Schönberger", email = "stefan@sniner.dev" }]
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "docuware-client>=0.7.11",
+    "docuware-client>=0.7.14",
     "fastmcp>=2.0.0",
 ]
 

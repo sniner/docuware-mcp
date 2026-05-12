@@ -16,6 +16,7 @@ from docuware_mcp.filters import (
     FilterValidationError,
     build_conditions,
     parse_combinator,
+    parse_order_by,
 )
 from docuware_mcp.schema import ArchiveSchema, describe_dialog
 
@@ -187,6 +188,7 @@ def search(
     archive: str,
     filters: Optional[Dict[str, Any]] = None,
     combinator: str = "AND",
+    order_by: Optional[List[Dict[str, str]]] = None,
     limit: int = 25,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -200,6 +202,12 @@ def search(
             :func:`describe_archive` to see which operators each field accepts.
         combinator: How multiple conditions are combined: ``"AND"`` (default)
             or ``"OR"``. DocuWare does not support mixed AND/OR in one query.
+        order_by: Server-side sort. List of ``{"field": str, "direction": str}``
+            dicts; ``direction`` is ``"asc"`` (default), ``"desc"``, or
+            ``"default"`` (archive's natural order). Multi-field is supported —
+            entries are applied in order. Especially useful for "latest N"
+            queries that would otherwise need to load all hits and sort
+            client-side.
         limit: Maximum results to return (1–200, default 25).
         offset: Number of results to skip (client-side slicing).
 
@@ -225,6 +233,7 @@ def search(
 
     try:
         conditions = build_conditions(filters, schema)
+        sort_spec = parse_order_by(order_by, schema)
     except FilterValidationError as exc:
         raise ValueError(str(exc)) from None
 
@@ -232,11 +241,18 @@ def search(
     dlg = _get_search_dialog(fc)
 
     log.info(
-        "search archive=%r [id=%s] filters=%s combinator=%s limit=%d offset=%d",
-        fc.name, fc.id, list(filters.keys()), combinator, limit, offset,
+        "search archive=%r [id=%s] filters=%s combinator=%s order_by=%s "
+        "limit=%d offset=%d",
+        fc.name, fc.id, list(filters.keys()), combinator, sort_spec,
+        limit, offset,
     )
 
-    result_iter = dlg.search(conditions, operation=op, quote=docuware.QuoteMode.NONE)
+    result_iter = dlg.search(
+        conditions,
+        operation=op,
+        order_by=sort_spec or None,
+        quote=docuware.QuoteMode.NONE,
+    )
     allowed_ids = {f.internal_id for f in schema.fields}
 
     items: List[Dict[str, Any]] = []

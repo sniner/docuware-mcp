@@ -14,6 +14,7 @@ from docuware_mcp.filters import (
     _escape_dw,
     build_conditions,
     parse_combinator,
+    parse_order_by,
 )
 from docuware_mcp.schema import (
     ArchiveSchema,
@@ -378,3 +379,86 @@ class TestParseCombinator:
     def test_invalid_raises(self) -> None:
         with pytest.raises(FilterValidationError, match="combinator must be"):
             parse_combinator("XOR")
+
+
+# --- parse_order_by --------------------------------------------------------
+
+
+class TestParseOrderBy:
+    def test_none_returns_empty(self, schema: ArchiveSchema) -> None:
+        assert parse_order_by(None, schema) == []
+
+    def test_empty_list_returns_empty(self, schema: ArchiveSchema) -> None:
+        assert parse_order_by([], schema) == []
+
+    def test_single_field_default_direction(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by([{"field": "Issued"}], schema)
+        assert out == [("ISSUED", "asc")]
+
+    def test_explicit_direction(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by(
+            [{"field": "Issued", "direction": "desc"}], schema
+        )
+        assert out == [("ISSUED", "desc")]
+
+    def test_multi_field_preserves_order(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by(
+            [
+                {"field": "Issued", "direction": "desc"},
+                {"field": "Amount", "direction": "asc"},
+            ],
+            schema,
+        )
+        assert out == [("ISSUED", "desc"), ("AMOUNT", "asc")]
+
+    def test_direction_case_insensitive(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by(
+            [{"field": "Issued", "direction": "DESC"}], schema
+        )
+        assert out == [("ISSUED", "desc")]
+
+    def test_field_resolves_by_internal_id(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by([{"field": "ISSUED"}], schema)
+        assert out == [("ISSUED", "asc")]
+
+    def test_default_direction_allowed(self, schema: ArchiveSchema) -> None:
+        out = parse_order_by(
+            [{"field": "Issued", "direction": "default"}], schema
+        )
+        assert out == [("ISSUED", "default")]
+
+    def test_unknown_field_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="unknown field 'Bogus'"):
+            parse_order_by([{"field": "Bogus"}], schema)
+
+    def test_invalid_direction_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="direction must be one of"):
+            parse_order_by(
+                [{"field": "Issued", "direction": "sideways"}], schema
+            )
+
+    def test_duplicate_field_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="already appears"):
+            parse_order_by(
+                [
+                    {"field": "Issued", "direction": "asc"},
+                    {"field": "ISSUED", "direction": "desc"},
+                ],
+                schema,
+            )
+
+    def test_non_list_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="must be a list"):
+            parse_order_by({"field": "Issued"}, schema)
+
+    def test_non_dict_entry_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="must be a dict"):
+            parse_order_by(["Issued"], schema)
+
+    def test_missing_field_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="field must be a non-empty string"):
+            parse_order_by([{"direction": "asc"}], schema)
+
+    def test_empty_field_raises(self, schema: ArchiveSchema) -> None:
+        with pytest.raises(FilterValidationError, match="field must be a non-empty string"):
+            parse_order_by([{"field": ""}], schema)
