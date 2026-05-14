@@ -39,6 +39,22 @@ The file uses the same keys as the environment variables:
 `organization` is optional if the service account belongs to a single
 organization. Make sure the file is not world-readable (`chmod 600`).
 
+For service-to-service deployments, OAuth2 Client Credentials is the
+recommended flow — no user account, no browser, no rotating refresh
+tokens. Requires a DocuWare "Trusted / Service" App Registration that
+provides a `client_secret`:
+
+```
+DW_URL=https://dms.example.com
+DW_CLIENT_ID=<app-registration-id>
+DW_CLIENT_SECRET=<secret>
+```
+
+This path is preferred over `DW_USERNAME` / `DW_PASSWORD` for unattended
+deployments (containers, systemd units, Claude Desktop on a workstation
+with secrets injected from a manager). `DW_CREDENTIALS_FILE` takes
+precedence if both are set.
+
 For internal DocuWare installations with self-signed or private-CA
 certificates, TLS verification can be disabled with
 `DW_VERIFY_CERT=false`. **Do not use this against production systems** —

@@ -43,10 +43,20 @@ def _get_client() -> docuware.Client:
         if not verify:
             log.warning("DW_VERIFY_CERT disabled — TLS certificate not verified")
         creds_file = os.environ.get("DW_CREDENTIALS_FILE")
+        client_id = os.environ.get("DW_CLIENT_ID")
         if creds_file:
             log.info("Connecting to DocuWare with credentials from %s", creds_file)
             _client = docuware.connect(
                 credentials_file=creds_file, verify_certificate=verify
+            )
+        elif client_id:
+            log.info("Connecting to DocuWare via client_credentials grant")
+            _client = docuware.connect(
+                authenticator=docuware.ClientCredentialsAuthenticator(
+                    client_id=client_id,
+                    client_secret=os.environ.get("DW_CLIENT_SECRET", ""),
+                ),
+                verify_certificate=verify,
             )
         else:
             log.info("Connecting to DocuWare via docuware.connect()")
