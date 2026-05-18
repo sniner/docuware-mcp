@@ -108,9 +108,7 @@ def _coerce(value: Any, fld: FieldSchema) -> Any:
 
     if ftype in ("numeric", "int"):
         if isinstance(value, bool):
-            raise FilterValidationError(
-                f"Field {fld.name!r} is type Numeric — got bool"
-            )
+            raise FilterValidationError(f"Field {fld.name!r} is type Numeric — got bool")
         if isinstance(value, int):
             return value
         if isinstance(value, str):
@@ -121,15 +119,12 @@ def _coerce(value: Any, fld: FieldSchema) -> Any:
                     f"Field {fld.name!r} is type Numeric — value {value!r} is not an integer"
                 ) from exc
         raise FilterValidationError(
-            f"Field {fld.name!r} is type Numeric — expected integer, got "
-            f"{type(value).__name__}"
+            f"Field {fld.name!r} is type Numeric — expected integer, got {type(value).__name__}"
         )
 
     if ftype == "decimal":
         if isinstance(value, bool):
-            raise FilterValidationError(
-                f"Field {fld.name!r} is type Decimal — got bool"
-            )
+            raise FilterValidationError(f"Field {fld.name!r} is type Decimal — got bool")
         if isinstance(value, (int, float)):
             return float(value)
         if isinstance(value, str):
@@ -140,8 +135,7 @@ def _coerce(value: Any, fld: FieldSchema) -> Any:
                     f"Field {fld.name!r} is type Decimal — value {value!r} is not a number"
                 ) from exc
         raise FilterValidationError(
-            f"Field {fld.name!r} is type Decimal — expected number, got "
-            f"{type(value).__name__}"
+            f"Field {fld.name!r} is type Decimal — expected number, got {type(value).__name__}"
         )
 
     # Text, Memo, Keyword, unknown: pass strings through, stringify others.
@@ -217,13 +211,13 @@ def _translate_one(fld: FieldSchema, spec: Any) -> Any:
             low, high = raw
             return [
                 _format(_coerce(low, fld), escape_wildcards=True) if low is not None else None,
-                _format(_coerce(high, fld), escape_wildcards=True) if high is not None else None,
+                _format(_coerce(high, fld), escape_wildcards=True)
+                if high is not None
+                else None,
             ]
 
         # Unreachable: 'allowed' check above filtered unsupported operators.
-        raise FilterValidationError(
-            f"Internal: operator {op!r} accepted but not implemented"
-        )
+        raise FilterValidationError(f"Internal: operator {op!r} accepted but not implemented")
 
     # Bare value = eq
     if "eq" not in allowed:
@@ -241,9 +235,7 @@ def build_conditions(filters: Dict[str, Any], schema: ArchiveSchema) -> Dict[str
     escaped according to their per-operator wildcard intent.
     """
     if not isinstance(filters, dict):
-        raise FilterValidationError(
-            f"filters must be an object, got {type(filters).__name__}"
-        )
+        raise FilterValidationError(f"filters must be an object, got {type(filters).__name__}")
 
     out: Dict[str, Any] = {}
     for fname, spec in filters.items():
@@ -265,9 +257,7 @@ def build_conditions(filters: Dict[str, Any], schema: ArchiveSchema) -> Dict[str
 _ORDER_DIRECTIONS: FrozenSet = frozenset({"asc", "desc", "default"})
 
 
-def parse_order_by(
-    order_by: Any, schema: ArchiveSchema
-) -> List[Tuple[str, str]]:
+def parse_order_by(order_by: Any, schema: ArchiveSchema) -> List[Tuple[str, str]]:
     """Validate the ``order_by`` spec and resolve fields to internal IDs.
 
     Accepts a list of ``{"field": str, "direction": "asc"|"desc"|"default"}``
@@ -292,14 +282,10 @@ def parse_order_by(
             )
         fname = entry.get("field")
         if not isinstance(fname, str) or not fname:
-            raise FilterValidationError(
-                f"order_by[{i}].field must be a non-empty string"
-            )
+            raise FilterValidationError(f"order_by[{i}].field must be a non-empty string")
         direction = entry.get("direction") or "asc"
         if not isinstance(direction, str):
-            raise FilterValidationError(
-                f"order_by[{i}].direction must be a string"
-            )
+            raise FilterValidationError(f"order_by[{i}].direction must be a string")
         norm = direction.strip().lower()
         if norm not in _ORDER_DIRECTIONS:
             raise FilterValidationError(

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import time
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Annotated, Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import docuware
 from fastmcp import FastMCP
+from pydantic import BeforeValidator
 
 from docuware_mcp import __version__
 from docuware_mcp.filters import (
@@ -46,9 +48,7 @@ def _get_client() -> docuware.Client:
         client_id = os.environ.get("DW_CLIENT_ID")
         if creds_file:
             log.info("Connecting to DocuWare with credentials from %s", creds_file)
-            _client = docuware.connect(
-                credentials_file=creds_file, verify_certificate=verify
-            )
+            _client = docuware.connect(credentials_file=creds_file, verify_certificate=verify)
         elif client_id:
             log.info("Connecting to DocuWare via client_credentials grant")
             _client = docuware.connect(
@@ -82,9 +82,7 @@ def _resolve_archive(client: docuware.Client, name_or_id: str) -> docuware.FileC
     if not candidates:
         raise ValueError(f"Archive not found: {name_or_id!r}")
     if len(candidates) > 1:
-        names = [
-            f"{c.name} [id={c.id}, org={c.organization.name}]" for c in candidates
-        ]
+        names = [f"{c.name} [id={c.id}, org={c.organization.name}]" for c in candidates]
         raise ValueError(
             f"Archive name {name_or_id!r} is ambiguous across organizations. "
             f"Use the internal ID instead. Candidates: {names}"
@@ -111,8 +109,9 @@ def _get_schema(client: docuware.Client, archive: str) -> ArchiveSchema:
     schema = describe_dialog(dlg, fc.name, fc.id)
     _schema_cache[archive] = (now, schema)
     _schema_cache[fc.id] = (now, schema)
-    log.info("Loaded schema for archive %r [id=%s]: %d fields",
-             fc.name, fc.id, len(schema.fields))
+    log.info(
+        "Loaded schema for archive %r [id=%s]: %d fields", fc.name, fc.id, len(schema.fields)
+    )
     return schema
 
 
@@ -150,6 +149,38 @@ def _extract_doc_id(field_values: Iterable[Any]) -> Optional[str]:
     return None
 
 
+# --- argument coercion ---
+
+
+def _parse_json_if_string(value: Any) -> Any:
+    """Tolerate stringified JSON for nested object/array tool arguments.
+
+    Some LLM clients emit nested tool arguments as JSON-encoded strings
+    instead of structured objects. When that happens, this validator
+    silently parses the string so the call still succeeds. All other
+    inputs pass through unchanged.
+    """
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"expected a JSON object or array; got a string that is not valid JSON: {exc}"
+            ) from None
+    return value
+
+
+FiltersArg = Annotated[
+    Optional[Dict[str, Any]],
+    BeforeValidator(_parse_json_if_string),
+]
+
+OrderByArg = Annotated[
+    Optional[List[Dict[str, str]]],
+    BeforeValidator(_parse_json_if_string),
+]
+
+
 # --- MCP server ---
 
 mcp = FastMCP("docuware-mcp", version=__version__)
@@ -168,11 +199,13 @@ def list_archives() -> List[Dict[str, str]]:
         for fc in org.file_cabinets:
             if fc.is_basket:
                 continue
-            out.append({
-                "name": fc.name,
-                "id": fc.id,
-                "organization": org.name,
-            })
+            out.append(
+                {
+                    "name": fc.name,
+                    "id": fc.id,
+                    "organization": org.name,
+                }
+            )
     log.info("list_archives → %d archives", len(out))
     return out
 
@@ -196,13 +229,19 @@ def describe_archive(archive: str) -> Dict[str, Any]:
 @mcp.tool()
 def search(
     archive: str,
-    filters: Optional[Dict[str, Any]] = None,
+    filters: FiltersArg = None,
     combinator: str = "AND",
-    order_by: Optional[List[Dict[str, str]]] = None,
+    order_by: OrderByArg = None,
     limit: int = 25,
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Search documents in an archive using the structured filter DSL.
+
+    IMPORTANT: `filters` and `order_by` are structured arguments. Pass them
+    as a JSON object/array, NOT as a JSON-encoded string. Correct:
+    ``{"BELEGART": "Rechnung"}``; incorrect: ``"{\\"BELEGART\\": \\"Rechnung\\"}"``.
+    Stringified JSON is accepted as a fallback for buggy clients but
+    indicates a malformed tool call.
 
     `filters` and `order_by` play distinct roles: `filters` selects which
     records are eligible (bounds, ranges, exact matches); `order_by` with
@@ -215,17 +254,20 @@ def search(
 
     Args:
         archive: Display name or internal ID of the archive.
-        filters: Dict mapping field names to either a bare value (= ``eq``) or
-            a single-operator dict like ``{"gte": 100}``. Supported operators:
-            ``eq``, ``like``, ``gte``, ``lte``, ``between``, ``empty``. Use
-            :func:`describe_archive` to see which operators each field accepts.
+        filters: JSON object mapping field names to either a bare value
+            (= ``eq``) or a single-operator dict like ``{"gte": 100}``.
+            Supported operators: ``eq``, ``like``, ``gte``, ``lte``,
+            ``between``, ``empty``. Use :func:`describe_archive` to see
+            which operators each field accepts. MUST be an object literal,
+            not a stringified JSON.
         combinator: How multiple conditions are combined: ``"AND"`` (default)
             or ``"OR"``. DocuWare does not support mixed AND/OR in one query.
-        order_by: Server-side ranking. List of ``{"field": str, "direction": str}``
-            dicts; ``direction`` is ``"asc"`` (default), ``"desc"``, or
-            ``"default"`` (archive's natural order). Multi-field is supported —
-            entries are applied in order, with later fields acting only as
-            tie-breakers for earlier ones.
+        order_by: Server-side ranking. JSON array of
+            ``{"field": str, "direction": str}`` dicts; ``direction`` is
+            ``"asc"`` (default), ``"desc"``, or ``"default"`` (archive's
+            natural order). Multi-field is supported — entries are applied
+            in order, with later fields acting only as tie-breakers for
+            earlier ones. MUST be an array literal, not a stringified JSON.
         limit: Maximum results to return (1–200, default 25).
         offset: Number of results to skip (client-side slicing).
 
@@ -259,10 +301,14 @@ def search(
     dlg = _get_search_dialog(fc)
 
     log.info(
-        "search archive=%r [id=%s] filters=%s combinator=%s order_by=%s "
-        "limit=%d offset=%d",
-        fc.name, fc.id, list(filters.keys()), combinator, sort_spec,
-        limit, offset,
+        "search archive=%r [id=%s] filters=%s combinator=%s order_by=%s limit=%d offset=%d",
+        fc.name,
+        fc.id,
+        list(filters.keys()),
+        combinator,
+        sort_spec,
+        limit,
+        offset,
     )
 
     result_iter = dlg.search(
@@ -281,12 +327,14 @@ def search(
             continue
         if len(items) >= limit:
             break
-        items.append({
-            "id": _extract_doc_id(item.fields),
-            "title": item.title,
-            "content_type": item.content_type,
-            "fields": _fields_to_dict(item.fields, allowed_ids=allowed_ids),
-        })
+        items.append(
+            {
+                "id": _extract_doc_id(item.fields),
+                "title": item.title,
+                "content_type": item.content_type,
+                "fields": _fields_to_dict(item.fields, allowed_ids=allowed_ids),
+            }
+        )
 
     return {
         "items": items,
@@ -385,7 +433,10 @@ def get_document_text(
 
     log.info(
         "get_document_text archive=%r [id=%s] doc=%s attachments=%d",
-        fc.name, fc.id, document_id, len(results),
+        fc.name,
+        fc.id,
+        document_id,
+        len(results),
     )
 
     return {
@@ -408,11 +459,13 @@ def status() -> Dict[str, Any]:
         for org in client.organizations:
             archives = [fc for fc in org.file_cabinets if not fc.is_basket]
             archive_count += len(archives)
-            orgs_info.append({
-                "name": org.name,
-                "id": org.id,
-                "archive_count": len(archives),
-            })
+            orgs_info.append(
+                {
+                    "name": org.name,
+                    "id": org.id,
+                    "archive_count": len(archives),
+                }
+            )
         return {
             "connected": True,
             "organizations": orgs_info,
@@ -467,7 +520,9 @@ def main() -> None:
         if args.http:
             log.info(
                 "Serving Streamable HTTP on http://%s:%d%s",
-                args.host, args.port, args.path,
+                args.host,
+                args.port,
+                args.path,
             )
             mcp.run(transport="http", host=args.host, port=args.port, path=args.path)
         else:

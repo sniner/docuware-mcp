@@ -20,14 +20,14 @@ log = logging.getLogger(__name__)
 # DocuWare DWFieldType values observed in the wild are case-insensitive.
 # Keys here are lowercased before lookup.
 _TYPE_OPERATORS: Dict[str, FrozenSet[str]] = {
-    "text":     frozenset({"eq", "like", "empty"}),
-    "memo":     frozenset({"eq", "like", "empty"}),
-    "keyword":  frozenset({"eq", "like", "empty"}),
+    "text": frozenset({"eq", "like", "empty"}),
+    "memo": frozenset({"eq", "like", "empty"}),
+    "keyword": frozenset({"eq", "like", "empty"}),
     "keywords": frozenset({"eq", "like", "empty"}),
-    "numeric":  frozenset({"eq", "gte", "lte", "between", "empty"}),
-    "int":      frozenset({"eq", "gte", "lte", "between", "empty"}),
-    "decimal":  frozenset({"eq", "gte", "lte", "between", "empty"}),
-    "date":     frozenset({"eq", "gte", "lte", "between", "empty"}),
+    "numeric": frozenset({"eq", "gte", "lte", "between", "empty"}),
+    "int": frozenset({"eq", "gte", "lte", "between", "empty"}),
+    "decimal": frozenset({"eq", "gte", "lte", "between", "empty"}),
+    "date": frozenset({"eq", "gte", "lte", "between", "empty"}),
     "datetime": frozenset({"eq", "gte", "lte", "between", "empty"}),
 }
 

@@ -54,8 +54,9 @@ def schema() -> ArchiveSchema:
             _make_field("Count", "Numeric", internal_id="COUNT"),
             _make_field("Issued", "Date", internal_id="ISSUED"),
             _make_field("Created", "DateTime", internal_id="CREATED"),
-            _make_field("Status", "Keyword", internal_id="STATUS",
-                        select_list=["open", "paid"]),
+            _make_field(
+                "Status", "Keyword", internal_id="STATUS", select_list=["open", "paid"]
+            ),
         ],
     )
 
@@ -282,21 +283,15 @@ class TestBuildConditionsRange:
         assert out == {"AMOUNT": [None, 100.0]}
 
     def test_between_closed(self, schema: ArchiveSchema) -> None:
-        out = build_conditions(
-            {"Issued": {"between": ["2026-01-01", "2026-01-31"]}}, schema
-        )
+        out = build_conditions({"Issued": {"between": ["2026-01-01", "2026-01-31"]}}, schema)
         assert out == {"ISSUED": [date(2026, 1, 1), date(2026, 1, 31)]}
 
     def test_between_open_low(self, schema: ArchiveSchema) -> None:
-        out = build_conditions(
-            {"Issued": {"between": [None, "2026-01-31"]}}, schema
-        )
+        out = build_conditions({"Issued": {"between": [None, "2026-01-31"]}}, schema)
         assert out == {"ISSUED": [None, date(2026, 1, 31)]}
 
     def test_between_open_high(self, schema: ArchiveSchema) -> None:
-        out = build_conditions(
-            {"Amount": {"between": [10, None]}}, schema
-        )
+        out = build_conditions({"Amount": {"between": [10, None]}}, schema)
         assert out == {"AMOUNT": [10.0, None]}
 
     def test_between_requires_two_elements(self, schema: ArchiveSchema) -> None:
@@ -396,9 +391,7 @@ class TestParseOrderBy:
         assert out == [("ISSUED", "asc")]
 
     def test_explicit_direction(self, schema: ArchiveSchema) -> None:
-        out = parse_order_by(
-            [{"field": "Issued", "direction": "desc"}], schema
-        )
+        out = parse_order_by([{"field": "Issued", "direction": "desc"}], schema)
         assert out == [("ISSUED", "desc")]
 
     def test_multi_field_preserves_order(self, schema: ArchiveSchema) -> None:
@@ -412,9 +405,7 @@ class TestParseOrderBy:
         assert out == [("ISSUED", "desc"), ("AMOUNT", "asc")]
 
     def test_direction_case_insensitive(self, schema: ArchiveSchema) -> None:
-        out = parse_order_by(
-            [{"field": "Issued", "direction": "DESC"}], schema
-        )
+        out = parse_order_by([{"field": "Issued", "direction": "DESC"}], schema)
         assert out == [("ISSUED", "desc")]
 
     def test_field_resolves_by_internal_id(self, schema: ArchiveSchema) -> None:
@@ -422,9 +413,7 @@ class TestParseOrderBy:
         assert out == [("ISSUED", "asc")]
 
     def test_default_direction_allowed(self, schema: ArchiveSchema) -> None:
-        out = parse_order_by(
-            [{"field": "Issued", "direction": "default"}], schema
-        )
+        out = parse_order_by([{"field": "Issued", "direction": "default"}], schema)
         assert out == [("ISSUED", "default")]
 
     def test_unknown_field_raises(self, schema: ArchiveSchema) -> None:
@@ -433,9 +422,7 @@ class TestParseOrderBy:
 
     def test_invalid_direction_raises(self, schema: ArchiveSchema) -> None:
         with pytest.raises(FilterValidationError, match="direction must be one of"):
-            parse_order_by(
-                [{"field": "Issued", "direction": "sideways"}], schema
-            )
+            parse_order_by([{"field": "Issued", "direction": "sideways"}], schema)
 
     def test_duplicate_field_raises(self, schema: ArchiveSchema) -> None:
         with pytest.raises(FilterValidationError, match="already appears"):
