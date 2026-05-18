@@ -204,6 +204,15 @@ def search(
 ) -> Dict[str, Any]:
     """Search documents in an archive using the structured filter DSL.
 
+    `filters` and `order_by` play distinct roles: `filters` selects which
+    records are eligible (bounds, ranges, exact matches); `order_by` with
+    `limit` chooses which of those eligible records to return (ranking
+    and cutoff). Express any bound as a filter, even one phrased
+    qualitatively — bounds map to `gte` / `lte` / `between` on numeric
+    and date fields, or `like` on text. A sort plus a small limit is not
+    a substitute for a bound: it ranks every record in the archive and
+    rarely matches what was actually meant.
+
     Args:
         archive: Display name or internal ID of the archive.
         filters: Dict mapping field names to either a bare value (= ``eq``) or
@@ -212,12 +221,11 @@ def search(
             :func:`describe_archive` to see which operators each field accepts.
         combinator: How multiple conditions are combined: ``"AND"`` (default)
             or ``"OR"``. DocuWare does not support mixed AND/OR in one query.
-        order_by: Server-side sort. List of ``{"field": str, "direction": str}``
+        order_by: Server-side ranking. List of ``{"field": str, "direction": str}``
             dicts; ``direction`` is ``"asc"`` (default), ``"desc"``, or
             ``"default"`` (archive's natural order). Multi-field is supported —
-            entries are applied in order. Especially useful for "latest N"
-            queries that would otherwise need to load all hits and sort
-            client-side.
+            entries are applied in order, with later fields acting only as
+            tie-breakers for earlier ones.
         limit: Maximum results to return (1–200, default 25).
         offset: Number of results to skip (client-side slicing).
 
