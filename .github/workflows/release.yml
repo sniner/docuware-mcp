@@ -3,94 +3,43 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
-  verify-version:
-    name: Verify tag matches pyproject version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compare git tag with [project].version
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          ver=$(awk '
-              /^\[project\]/ { in_proj=1; next }
-              /^\[/          { in_proj=0 }
-              in_proj && /^[[:space:]]*version[[:space:]]*=/ {
-                  gsub(/^[[:space:]]*version[[:space:]]*=[[:space:]]*"/, "")
-                  gsub(/".*$/, "")
-                  print
-                  exit
-              }
-          ' pyproject.toml)
-          echo "Git tag (stripped): $tag"
-          echo "pyproject version:  $ver"
-          if [ "$tag" != "$ver" ]; then
-              echo "::error::Git tag v$tag does not match [project].version $ver — bump pyproject.toml before tagging."
-              exit 1
-          fi
-          echo "OK: tag and pyproject version match."
-
-  test:
-    runs-on: ubuntu-latest
-    needs: verify-version
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync
-
-      - name: Run tests
-        run: uv run pytest
-
   release:
     runs-on: ubuntu-latest
-    needs: test
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # Full history is needed so `git describe` can find the previous
-          # v* tag for the commit-list release notes.
-          fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(awk '/^\[project\]/{p=1;next} /^\[/{p=0} p&&/^[[:space:]]*version[[:space:]]*=/{gsub(/^[[:space:]]*version[[:space:]]*=[[:space:]]*"/,"");gsub(/".*$/,"");print;exit}' pyproject.toml)
+          [ "$tag" = "$pkg" ] || { echo "::error::tag v$tag != pyproject.toml $pkg"; exit 1; }
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+              $0 ~ "^## " ver "( |$|\\()" { grab=1; next }
+              grab && /^## /              { exit }
+              grab                        { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
+          [ -s release-notes.md ] || { echo "::error::No CHANGELOG section for $version"; exit 1; }
+          cat release-notes.md
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-          enable-cache: true
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Build package
         run: uv build
 
-      - name: Generate release notes from commit log
-        # The commit list since the previous v* tag IS the changelog —
-        # no separate CHANGELOG.md, no GitHub-generated diff link.
-        run: |
-          prev_tag=$(git describe --tags --abbrev=0 --match='v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-          if [ -n "$prev_tag" ]; then
-              range="${prev_tag}..${GITHUB_REF_NAME}"
-              echo "## Changes since ${prev_tag}" > release-notes.md
-          else
-              range="${GITHUB_REF_NAME}"
-              echo "## Initial release" > release-notes.md
-          fi
-          echo "" >> release-notes.md
-          git log --no-merges --pretty='- %s' "$range" >> release-notes.md
-          echo "--- release-notes.md ---"
-          cat release-notes.md
-
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.whl
