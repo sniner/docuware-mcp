@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import os
 import time
-from typing import Annotated, Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    ParamSpec,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 import docuware
-from fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BeforeValidator
 
 from docuware_mcp import __version__
@@ -183,10 +197,34 @@ OrderByArg = Annotated[
 
 # --- MCP server ---
 
-mcp = FastMCP("docuware-mcp", version=__version__)
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
-@mcp.tool()
+def _surface_tool_errors(fn: Callable[_P, _R]) -> Callable[_P, _R]:
+    """Re-raise expected failures as ToolError so their text reaches the model.
+
+    The MCP SDK forwards only ToolError messages to the caller; any other
+    exception is reported as a generic crash with its text kept server-side.
+    Validation problems and DocuWare API errors are the caller's to fix, so
+    they must arrive with their message intact.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        try:
+            return fn(*args, **kwargs)
+        except (ValueError, docuware.DocuwareClientException) as exc:
+            raise ToolError(str(exc)) from exc
+
+    return wrapper
+
+
+server = MCPServer("docuware-mcp", version=__version__)
+
+
+@server.tool()
+@_surface_tool_errors
 def list_archives() -> List[Dict[str, str]]:
     """List archives accessible to the configured DocuWare service account.
 
@@ -210,7 +248,8 @@ def list_archives() -> List[Dict[str, str]]:
     return out
 
 
-@mcp.tool()
+@server.tool()
+@_surface_tool_errors
 def describe_archive(archive: str) -> Dict[str, Any]:
     """Describe an archive's schema: fields, types, and allowed operators.
 
@@ -226,7 +265,8 @@ def describe_archive(archive: str) -> Dict[str, Any]:
     return schema.to_dict()
 
 
-@mcp.tool()
+@server.tool()
+@_surface_tool_errors
 def search(
     archive: str,
     filters: FiltersArg = None,
@@ -354,7 +394,8 @@ def _attachment_summary(att: Any) -> Dict[str, Any]:
     }
 
 
-@mcp.tool()
+@server.tool()
+@_surface_tool_errors
 def get_document(archive: str, document_id: str) -> Dict[str, Any]:
     """Fetch a single document's metadata by primary-key ID.
 
@@ -380,7 +421,8 @@ def get_document(archive: str, document_id: str) -> Dict[str, Any]:
     }
 
 
-@mcp.tool()
+@server.tool()
+@_surface_tool_errors
 def get_document_text(
     archive: str,
     document_id: str,
@@ -445,7 +487,7 @@ def get_document_text(
     }
 
 
-@mcp.tool()
+@server.tool()
 def status() -> Dict[str, Any]:
     """Connection health: organizations and visible archive count.
 
@@ -499,8 +541,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--path",
-        default=os.environ.get("DW_MCP_PATH", "/mcp/"),
-        help="HTTP mount path (default: /mcp/, env: DW_MCP_PATH).",
+        default=os.environ.get("DW_MCP_PATH", "/mcp"),
+        help="HTTP mount path (default: /mcp, env: DW_MCP_PATH).",
     )
     return parser
 
@@ -524,9 +566,15 @@ def main() -> None:
                 args.port,
                 args.path,
             )
-            mcp.run(transport="http", host=args.host, port=args.port, path=args.path)
+            server.run(
+                transport="streamable-http",
+                host=args.host,
+                port=args.port,
+                streamable_http_path=args.path,
+                stateless_http=True,
+            )
         else:
-            mcp.run()
+            server.run()
     except KeyboardInterrupt:
         log.info("Interrupted — shutting down")
 

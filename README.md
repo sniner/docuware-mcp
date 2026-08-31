@@ -1,7 +1,9 @@
 # docuware-mcp
 
 A Model Context Protocol (MCP) server that exposes a DocuWare DMS to
-LLM-based agents through a database-style API.
+LLM-based agents through a database-style API. It serves both the
+current sessionless MCP revision (2026-07-28) and the older
+handshake-based protocol — each client gets whichever it asks for.
 
 This is an independent project with no affiliation to DocuWare GmbH.
 
@@ -64,9 +66,11 @@ OAuth2 requires DocuWare 7.10 or later.
 
 ## Use with an MCP client
 
-`docuware-mcp` is a stdio-based MCP server: an MCP client (Claude
+By default `docuware-mcp` speaks MCP over stdio: an MCP client (Claude
 Desktop, Claude Code, …) launches it as a subprocess and talks to it
-over stdin/stdout. You don't run it yourself — the client does.
+over stdin/stdout. You don't run it yourself — the client does. For
+clients that connect over the network instead, see
+[Serving over HTTP](#serving-over-http) below.
 
 The recommended install path is via [`uv`](https://docs.astral.sh/uv/),
 because `uvx` will fetch and run the package on demand without a global
@@ -119,7 +123,27 @@ appear in the available-tools list, exposing `list_archives`,
 `describe_archive`, `search`, `get_document`, `get_document_text`,
 and `status`.
 
-### Running directly (for debugging)
+## Serving over HTTP
+
+Clients that cannot launch a subprocess — Open WebUI, for example —
+connect over the network instead. For those, start the server yourself
+with `--http`:
+
+```
+docuware-mcp --http
+```
+
+It then accepts Streamable HTTP connections on
+`http://127.0.0.1:8765/mcp`. Bind address, port, and path can be
+changed with `--host`, `--port`, and `--path`, or the environment
+variables `DW_MCP_HOST`, `DW_MCP_PORT`, and `DW_MCP_PATH`.
+
+The HTTP endpoint performs no authentication of its own: anyone who can
+reach it can query the DocuWare account it is configured with. Keep it
+on localhost, or put an authenticating reverse proxy in front before
+exposing it beyond the machine.
+
+## Running directly (for debugging)
 
 If you've cloned this repo and want to poke at the server with the
 [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
